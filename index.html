@@ -1,6 +1,154 @@
-teste
-teste
-teste
-teste
-teste
-jjhbuyhuyh
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard do Nível de Água</title>
+    <!-- MQTT e Chart.js -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1e1e2e;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .card {
+            background-color: #2a2a3c;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 700px;
+        }
+        .distance-display {
+            font-size: 48px;
+            font-weight: bold;
+            color: #00ffcc;
+            margin: 10px 0 20px 0;
+        }
+        .status {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>Monitor de Distância ESP32</h2>
+        <div class="status" id="status">Conectando ao servidor...</div>
+        
+        <div class="distance-display">
+            <span id="valorDistancia">--</span> cm
+        </div>
+        
+        <!-- Contêiner do Gráfico -->
+        <div class="chart-container">
+            <canvas id="historicoGrafico"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // Configuração do Gráfico (Chart.js)
+        const ctx = document.getElementById('historicoGrafico').getContext('2d');
+        const maxPontos = 20; // Quantidade máxima de pontos mostrados no gráfico
+        
+        const grafico = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], // Eixo X (Tempo)
+                datasets: [{
+                    label: 'Distância (cm)',
+                    data: [], // Eixo Y (Valores)
+                    borderColor: '#00ffcc',
+                    backgroundColor: 'rgba(0, 255, 204, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3, // Curvatura da linha
+                    pointBackgroundColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        ticks: { color: '#aaa' },
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' }
+                    },
+                    y: {
+                        ticks: { color: '#aaa' },
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: { color: '#fff' }
+                    }
+                }
+            }
+        });
+
+        // Configuração MQTT
+        const host = 'ws://broker.hivemq.com:8000/mqtt';
+        const clientId = 'web_' + Math.random().toString(16).substr(2, 8);
+        const client = mqtt.connect(host, { clientId: clientId });
+        const topic = "meu_esp32/sensor_distancia"; 
+
+        client.on('connect', function () {
+            document.getElementById('status').innerText = 'Online - Aguardando dados...';
+            document.getElementById('status').style.color = '#00ffcc';
+            client.subscribe(topic);
+        });
+
+        client.on('message', function (topic, message) {
+            // Atualiza o texto grande
+            const distancia = parseFloat(message.toString()).toFixed(1);
+            document.getElementById('valorDistancia').innerText = distancia;
+
+            // Pega a hora atual formatada (HH:MM:SS)
+            const agora = new Date();
+            const horaFormatada = agora.getHours().toString().padStart(2, '0') + ':' + 
+                                  agora.getMinutes().toString().padStart(2, '0') + ':' + 
+                                  agora.getSeconds().toString().padStart(2, '0');
+
+            // Adiciona os novos dados ao gráfico
+            grafico.data.labels.push(horaFormatada);
+            grafico.data.datasets[0].data.push(distancia);
+
+            // Remove o dado mais antigo se passar de 20 medições para não travar a tela
+            if (grafico.data.labels.length > maxPontos) {
+                grafico.data.labels.shift();
+                grafico.data.datasets[0].data.shift();
+            }
+
+            // Atualiza o desenho do gráfico
+            grafico.update();
+        });
+
+        client.on('error', function (error) {
+            console.error("Erro MQTT:", error);
+            document.getElementById('status').innerText = 'Erro de conexão';
+            document.getElementById('status').style.color = '#ff4444';
+        });
+    </script>
+</body>
+</html>
